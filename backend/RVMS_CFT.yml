@@ -1,0 +1,568 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Rapyder Visitor Management System
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  PinpointProjectID:
+    Description: Pinpoint project ID. Please enter the project id of your pinpoint project in the same region.
+    Type: String
+  SenderEmailAddress:
+    Description: Registered email Id from which emails will be sent.
+    Type: String
+  OTPTableName:
+    Description: Please enter the name of the DynamoDB table which will store the otp of the visitor.
+    Type: String
+  UserTable:
+    Description: Please enter the name of the DynamoDB table which will store the details of the visitor.
+    Type: String
+  EmployeeTable:
+    Description: Please enter the name of the DynamoDB table which will store the Rapyder employee details.
+    Type: String
+  # UserPoolId:
+  #   Type: String
+Resources:
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: An API Gateway with a Lambda Integration
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: "rapyder.visitor.portal"
+
+  ApiGatewayResourceGenerateotp:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: generateotp
+      RestApiId: !Ref ApiGatewayRestApi
+
+  ApiGatewayResourceCheckuser:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: checkuser
+      RestApiId: !Ref ApiGatewayRestApi
+  
+  ApiGatewayResourceUserdetails:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: userdetails
+      RestApiId: !Ref ApiGatewayRestApi
+  
+  ApiGatewayResourceVerifyotp:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: verifyotp
+      RestApiId: !Ref ApiGatewayRestApi
+
+  ApiGatewayMethodGenerateotp:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      # ApiKeyRequired: true
+      ResourceId: !Ref ApiGatewayResourceGenerateotp
+      RestApiId: !Ref ApiGatewayRestApi
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt ApiGatewayIamRole.Arn
+        IntegrationHttpMethod: POST
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionGenerateOTP.Arn}/invocations'
+        IntegrationResponses: 
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+          - StatusCode: '200'
+            ResponseModels: { "application/json": "Empty" }
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+  
+  ApiGatewayMethodOPTIONSGenerateotp:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceGenerateotp
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+      
+
+  ApiGatewayMethodCheckuser:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      # ApiKeyRequired: true
+      ResourceId: !Ref ApiGatewayResourceCheckuser
+      RestApiId: !Ref ApiGatewayRestApi
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt ApiGatewayIamRole.Arn
+        IntegrationHttpMethod: POST
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionCheckUserExists.Arn}/invocations'
+      MethodResponses:
+          - StatusCode: '200'
+            ResponseModels: { "application/json": "Empty" }
+  
+  ApiGatewayMethodOPTIONSCheckuser:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceCheckuser
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+  
+  ApiGatewayMethodVerifyotp:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      # ApiKeyRequired: true
+      ResourceId: !Ref ApiGatewayResourceVerifyotp
+      RestApiId: !Ref ApiGatewayRestApi
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt ApiGatewayIamRole.Arn
+        IntegrationHttpMethod: POST
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionVerifyOtp.Arn}/invocations'
+      MethodResponses:
+          - StatusCode: '200'
+            ResponseModels: { "application/json": "Empty" }
+  
+  ApiGatewayMethodOPTIONSVerifyotp:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceVerifyotp
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+  
+  ApiGatewayMethodUserdetails:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      # ApiKeyRequired: true
+      ResourceId: !Ref ApiGatewayResourceUserdetails
+      RestApiId: !Ref ApiGatewayRestApi
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt ApiGatewayIamRole.Arn
+        IntegrationHttpMethod: POST
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunctionUserDetails.Arn}/invocations'
+      MethodResponses:
+          - StatusCode: '200'
+            ResponseModels: { "application/json": "Empty" }
+
+  ApiGatewayMethodOPTIONSUserdetails:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceUserdetails
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  ApiGatewayDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    DependsOn:
+      - ApiGatewayMethodGenerateotp
+      - ApiGatewayMethodOPTIONSGenerateotp
+      - ApiGatewayMethodCheckuser
+      - ApiGatewayMethodOPTIONSCheckuser
+      - ApiGatewayMethodVerifyotp
+      - ApiGatewayMethodOPTIONSVerifyotp
+      - ApiGatewayMethodUserdetails
+      - ApiGatewayMethodOPTIONSUserdetails
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref ApiGatewayRestApi
+      StageName: 'v1'
+      
+  # ApiKey:
+  #   Type: 'AWS::ApiGateway::ApiKey'
+  #   Properties:
+  #     Name:
+  #       Fn::Join:
+  #         - ''
+  #         - - Ref: APIGatewayName
+  #           - Ref: AWS::AccountId
+  #     Description: CloudFormation API Key V1
+  #     Enabled: true
+
+  # UsagePlan:
+  #   Type: 'AWS::ApiGateway::UsagePlan'
+  #   DependsOn: ApiGatewayDeployment
+  #   Properties:
+  #     ApiStages:
+  #       - ApiId: !Ref ApiGatewayRestApi
+  #         Stage: 'v1'
+  #     Description: Usage plan with API Key
+  #     Throttle:
+  #       BurstLimit: 500
+  #       RateLimit: 100
+  #     UsagePlanName:
+  #       Fn::Join:
+  #         - ''
+  #         - - !Ref APIGatewayName
+  #           - '-plan'
+
+  # UsagePlanKey:
+  #   Type: 'AWS::ApiGateway::UsagePlanKey'
+  #   Properties:
+  #     KeyId: !Ref ApiKey
+  #     KeyType: API_KEY
+  #     UsagePlanId: !Ref UsagePlan
+
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    # Condition: EnableEmailTemp
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: '*'
+
+  LambdaFunctionGenerateOTP:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: coe-rapyder-solutions
+        S3Key: rapydervisitormanagement/RapyderVisitorManagement-GenerateOTP-91dc74d5-a8fa-438d-bc7d-3cf5ff91d63e.zip
+      Description: AWS Lambda function
+      FunctionName:
+        Fn::Join:
+        - ''
+        - - RVMS-GenerateOTP-
+          - '-'
+          - Ref: AWS::AccountId
+          - "-"
+          - Ref: AWS::Region
+          - '-'
+          - Ref: ApiGatewayRestApi
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt GenOTPRole.Arn
+      Runtime: nodejs16.x
+      Timeout: 60
+      Layers:
+        - !Ref LambdaLayer
+      Environment:
+        Variables:
+          DB_TABLE: !Ref OTPTableName
+          OTP_EXPIRY_MINUTES: "2"
+          PINPOINT_APPLICATION_ID: !Ref PinpointProjectID
+          SENDER_EMAIL_ADDRESS: !Ref SenderEmailAddress
+          TOKEN_LENGTH: "5"
+
+  LambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties: 
+      CompatibleRuntimes: 
+        - nodejs16.x
+      Content: 
+          S3Bucket: coe-rapyder-solutions
+          S3Key: lambdalayer/rapydervisitGenotp-3f8330a3-ec35-4671-8ff5-d5b3cc5d0b61.zip
+      Description: "Lambda layer"
+      LayerName: String
+
+  LambdaFunctionCheckUserExists:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: coe-rapyder-solutions
+        S3Key: rapydervisitormanagement/RapyderVisitorManagement-CheckUserExists-fc4f0457-c60a-4e03-b72c-478f86a2448f.zip
+      Description: AWS Lambda function
+      FunctionName:
+        Fn::Join:
+        - ''
+        - - RVMS-CheckUserExists-
+          - '-'
+          - Ref: AWS::AccountId
+          - "-"
+          - Ref: AWS::Region
+          - '-'
+          - Ref: ApiGatewayRestApi
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt GenOTPRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Layers:
+        - !Ref LambdaLayer
+      Environment:
+        Variables:
+          TableName: !Ref UserTable
+
+  LambdaFunctionVerifyOtp:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: coe-rapyder-solutions
+        S3Key: rapydervisitormanagement/RapyderVisitorManagement-VerifyOtp-30f5f5e0-d5cd-4399-9cef-cdfa7457fadd.zip
+      Description: AWS Lambda function
+      FunctionName:
+        Fn::Join:
+        - ''
+        - - RVMS-VerifyOtp-
+          - '-'
+          - Ref: AWS::AccountId
+          - "-"
+          - Ref: AWS::Region
+          - '-'
+          - Ref: ApiGatewayRestApi
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt GenOTPRole.Arn
+      Runtime: "nodejs16.x"
+      Timeout: 60
+      Layers:
+        - !Ref LambdaLayer
+      Environment:
+        Variables:
+          DB_TABLE: !Ref OTPTableName
+          EMP_DB_TABLE: !Ref EmployeeTable
+          SENDER_EMAIL_ADDRESS: !Ref SenderEmailAddress
+          USER_TABLE: !Ref UserTable
+
+  LambdaFunctionUserDetails:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: coe-rapyder-solutions
+        S3Key: rapydervisitormanagement/RapyderVisitorManagement-UserDetails-f802ced8-4a1d-4b9a-8cc2-6f32865c1c02.zip
+      Description: AWS Lambda function
+      FunctionName:
+        Fn::Join:
+        - ''
+        - - RVMS-UserDetails-
+          - '-'
+          - Ref: AWS::AccountId
+          - "-"
+          - Ref: AWS::Region
+          - '-'
+          - Ref: ApiGatewayRestApi
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt GenOTPRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Layers:
+        - !Ref LambdaLayer
+      Environment:
+        Variables:
+          TableName: !Ref UserTable
+
+  # Common ROLE
+  GenOTPRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+                - mobiletargeting:*
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                Resource:
+                  - "arn:aws:ses:*"         # Further, one can add the region and account to all the ARNs.
+                  - "arn:aws:mobiletargeting:*"
+                  - "arn:aws:logs:*"
+                  - "arn:aws:dynamodb:*"
+  OTPTable:
+    Type: AWS::DynamoDB::Table
+    # DeletionPolicy: Replace
+    # UpdateReplacePolicy: Replace
+    Properties:
+      TableName: !Ref OTPTableName
+      AttributeDefinitions:
+      - AttributeName: Id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: Id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TimeToLiveSpecification:
+        AttributeName: "expiryAt"
+        Enabled: true
+
+
+  UserTableDDB:
+    Type: AWS::DynamoDB::Table
+    # DeletionPolicy: Replace
+    # UpdateReplacePolicy: Replace
+    Properties:
+      TableName: !Ref UserTable
+      AttributeDefinitions:
+      - AttributeName: emailId
+        AttributeType: S
+      - AttributeName: phoneNumber
+        AttributeType: S
+      KeySchema:
+      - AttributeName: emailId
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema: 
+            - AttributeName: phoneNumber
+              KeyType: HASH
+          Projection: 
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+  
+  EmployeeTableDDB:
+    Type: AWS::DynamoDB::Table
+    # DeletionPolicy: Replace
+    # UpdateReplacePolicy: Replace
+    Properties:
+      TableName: !Ref EmployeeTable
+      AttributeDefinitions:
+      - AttributeName: employeeName
+        AttributeType: S
+      KeySchema:
+      - AttributeName: employeeName
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
