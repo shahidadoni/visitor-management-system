@@ -1,9 +1,17 @@
 import json
 import boto3
 import os
+import base64
+import six
+import uuid
+import imghdr
+import io
 
 client = boto3.client('dynamodb')
 table_name = os.environ['TableName']
+s3Bucket = os.environ['s3Bucket']
+s3 = boto3.resource('s3')
+
 
 def lambda_handler(event, context):
     # TODO implement
@@ -14,7 +22,17 @@ def lambda_handler(event, context):
     phone_number = event["phoneNumber"]
     photograph = event["photograph"]
     
+    photograph = photograph[photograph.find(",")+1:] 
+    imgdata = base64.b64decode(photograph + "===")
+    # file = open(photograph,'rb')
+    # imgdata = base64.b64decode(photograph)
+    print(imgdata)
+    
     try:
+        object = s3.Object(s3Bucket,'index/'+name+'.jpeg')
+        ret = object.put(Body=io.BytesIO(imgdata),
+                        Metadata={'FullName': emailId}
+                        )
         response = client.put_item(
             Item={
                 'emailId': {
@@ -28,10 +46,7 @@ def lambda_handler(event, context):
                 },
                 'company': {
                     'S': company,
-                },
-                'photograph': {
-                    'S': photograph,
-                },
+                }
             },
             TableName=table_name,
         )
